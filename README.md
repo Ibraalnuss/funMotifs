@@ -52,7 +52,7 @@ Predicted functional motifs are overlapped with somatic CRC variants. SNPs are f
 ## Repository structure
 
 ```
-funmotifs_ibraheem/
+funmotifs-crc-rosetta/
 │
 ├── scripts/                        # Numbered pipeline scripts (this repository)
 │   ├── run_pipeline.py             # Wrapper: run any range of steps
@@ -71,7 +71,11 @@ funmotifs_ibraheem/
 │   └── 09_patient_hotspot_subgroups.py
 │
 ├── data/
-│   ├── external/                   # Raw input files (not tracked by git)
+│   ├── external/                   # Raw/reference input files (not tracked by git)
+│   │   ├── rosetta_model/          # ROSETTA RDS model/deployment files
+│   │   ├── gwas_ldproxy/           # Optional LDproxy TSV/BED files
+│   │   ├── blacklist/              # Optional hg38 blacklist BED
+│   │   └── private_crc_variants/   # Private raw CRC MAF files, not tracked by git
 │   ├── interim/                    # Intermediate files generated during the run
 │   └── processed/                  # Final prediction outputs
 │
@@ -131,24 +135,29 @@ The following external files must be placed in `data/external/` before running t
 | File | Source | Used by |
 |---|---|---|
 | `colon_annotations.tsv` | funMotifs colon tissue annotation output | 02 |
-| `sig_rules_final_with_pretty_rules.rds` | Trained ROSETTA model (from thesis model training) | 03 |
-| `rosetta_deployment_info.rds` | ROSETTA deployment metadata (pred_cols, factor_levels) | 03 |
-| `wang_cutpoints_final.rds` | Wang discretization cutpoints (stored in deployment info) | 02, 03 |
+| `rosetta_model/sig_rules_final_with_pretty_rules.rds` | Trained ROSETTA model (from thesis model training) | 03 |
+| `rosetta_model/rosetta_deployment_info.rds` | ROSETTA deployment metadata (pred_cols, factor_levels) | 03 |
+| `rosetta_model/rosetta_predictor_schema.rds` | Predictor schema retained for model traceability | 03 |
+| `rosetta_model/train_wang_final_used_for_rosetta.rds` | Final Wang-discretized training object retained for traceability | 03 |
+| `rosetta_model/wang_cutpoints_final.rds` | Wang discretization cutpoints (stored in deployment info) | 02, 03 |
 | `CRC-colon.section6.sorted.bed` | CRC somatic variant BED (derived from MAF file) | 05 |
 | `motifs_pfm.tsv` | Motif PFM table: columns name, position, allele, freq | 05 |
 | `gwas-association-CRC.tsv` | GWAS Catalog download filtered to colorectal cancer | 07 |
+| `gwas_ldproxy/combined_LDproxy_EUR.tsv` | Optional LDproxy table for CRC GWAS variants | 07 |
+| `gwas_ldproxy/combined_LDproxy_EUR.bed` | Optional BED version of LDproxy variants | 07 |
+| `gwas_ldproxy/combined_LDproxy_EUR.sorted.bed` | Optional sorted BED version for bedtools overlap | 07 |
 | `NCG_cancerdrivers_annotation_supporting_evidence.tsv` | NCG cancer driver database | 07 |
 | `KEGG_2026_table_T500_genes.txt` | Enrichr KEGG result for top recurrent genes (optional) | 07 |
 | `KEGG_2026_T162_NCG.txt` | Enrichr KEGG result for NCG-overlapping genes (optional) | 07 |
-| `hg38-blacklist.v3.bed` | ENCODE genomic blacklist (optional, used in script 09) | 09 |
+| `blacklist/hg38-blacklist.v3.bed` | ENCODE genomic blacklist (optional, used in script 09) | 09 |
 
 The CRC variant BED file is derived from:
 
 ```
-CRC-SW.Ensemble.1063_DNBSEQ.20210706.lite.maf.gz
+data/external/private_crc_variants/CRC-SW.Ensemble.1063_DNBSEQ.20210706.lite.maf.gz
 ```
 
-This MAF file is not publicly available and is not included in the repository.
+This MAF file is private, is not publicly available, and is not included in the repository.
 
 ---
 
@@ -165,8 +174,8 @@ Before running the full pipeline, check that the required files and key columns 
 ```bash
 python scripts/check_inputs.py \
   --colon-annotations data/external/colon_annotations.tsv \
-  --rules data/external/sig_rules_final_with_pretty_rules.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/rosetta_model/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --variant-bed data/external/CRC-colon.section6.sorted.bed \
   --pfm data/external/motifs_pfm.tsv \
   --gwas data/external/gwas-association-CRC.tsv \
@@ -179,8 +188,8 @@ To run the full pipeline from ROSETTA prediction through patient subgroups:
 python scripts/run_pipeline.py \
   --from rosetta_prepare --to subgroups \
   --colon-annotations data/external/colon_annotations.tsv \
-  --rules data/external/sig_rules_final_with_pretty_rules.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/rosetta_model/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --variant-bed data/external/CRC-colon.section6.sorted.bed \
   --pfm data/external/motifs_pfm.tsv \
   --gwas data/external/gwas-association-CRC.tsv \
@@ -383,8 +392,8 @@ The model itself is in `sig_rules_final_with_pretty_rules.rds` and was trained w
 ```bash
 Rscript scripts/03_predict_rosetta_colon.R \
   --chunk-dir data/interim/colon_rosetta_chunks \
-  --rules data/external/sig_rules_final_with_pretty_ries.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --out-dir results/tables/rosetta_chunk_predictions
 ```
 
@@ -393,8 +402,8 @@ Alternatively, pass a chunk list file instead of a directory:
 ```bash
 Rscript scripts/03_predict_rosetta_colon.R \
   --chunk-list data/interim/colon_rosetta_chunk_list.txt \
-  --rules data/external/sig_rules_final_with_pretty_rules.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/rosetta_model/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --out-dir results/tables/rosetta_chunk_predictions
 ```
 
@@ -915,8 +924,8 @@ Validates that the main pipeline inputs are present and that the most important 
 ```bash
 python scripts/check_inputs.py \
   --colon-annotations data/external/colon_annotations.tsv \
-  --rules data/external/sig_rules_final_with_pretty_rules.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/rosetta_model/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --variant-bed data/external/CRC-colon.section6.sorted.bed \
   --pfm data/external/motifs_pfm.tsv \
   --gwas data/external/gwas-association-CRC.tsv \
@@ -928,14 +937,14 @@ Optional checks can be added when those files are available:
 ```bash
 python scripts/check_inputs.py \
   --colon-annotations data/external/colon_annotations.tsv \
-  --rules data/external/sig_rules_final_with_pretty_rules.rds \
-  --deployment data/external/rosetta_deployment_info.rds \
+  --rules data/external/rosetta_model/sig_rules_final_with_pretty_rules.rds \
+  --deployment data/external/rosetta_model/rosetta_deployment_info.rds \
   --variant-bed data/external/CRC-colon.section6.sorted.bed \
   --pfm data/external/motifs_pfm.tsv \
   --gwas data/external/gwas-association-CRC.tsv \
   --ncg data/external/NCG_cancerdrivers_annotation_supporting_evidence.tsv \
   --gene-map data/external/gene_id_to_symbol.tsv \
-  --blacklist-bed data/external/hg38-blacklist.v3.bed
+  --blacklist-bed data/external/blacklist/hg38-blacklist.v3.bed
 ```
 
 Use `--skip-tool-checks` or `--skip-package-checks` only if you want to validate file structure without checking the local software environment.
@@ -1081,7 +1090,7 @@ The most important downstream-facing output files are:
 
 ## Notes on reproducibility
 
-The numbered scripts in `scripts/` represent the final, cleaned version of the analysis workflow. The original exploratory scripts were consolidated into these numbered scripts. Archived source scripts are retained in `scripts/KEEP_THESIS_DOCUMENTATION/` and `scripts/ARCHIVE_SUPERSEDED/` for traceability.
+The numbered scripts in `scripts/` represent the final, cleaned version of the analysis workflow. The original exploratory scripts were consolidated into these numbered scripts. Archived source scripts and older analysis outputs are retained under `archive/` for traceability.
 
 Before running, use `check_inputs.py` to verify the main paths and required columns. After running, use `summarize_outputs.py` to generate a compact table of key output counts.
 
